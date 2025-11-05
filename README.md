@@ -1,4 +1,4 @@
-# InfoHub - ByteXL Coding Challenge
+# InfoHub 
 
 A beautiful single-page application that brings together three everyday utilities: Weather Information, Currency Conversion, and Motivational Quotes.
 
