@@ -250,14 +250,11 @@ app.get('/api/quote', async (req, res) => {
         author: response.data.author
       });
     } catch (apiError) {
-      console.error('❌ Quotes API Error:', apiError.message);
-      
-      // Fallback to local quotes if API fails - always return a quote
+      // Fallback to local quotes if API fails (silently)
       const randomQuote = FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)];
       res.json({
         text: randomQuote.text,
-        author: randomQuote.author,
-        note: 'Using local quote due to API unavailability'
+        author: randomQuote.author
       });
     }
   } catch (error) {

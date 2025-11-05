@@ -10,6 +10,12 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.path}`, req.query);
+  next();
+});
+
 // Default location for weather
 const DEFAULT_CITY = 'Mumbai';
 
@@ -185,14 +191,19 @@ app.get('/api/currency', async (req, res) => {
   try {
     const amount = parseFloat(req.query.amount);
     
+    console.log(`💱 Currency conversion request received - Query:`, req.query);
+    console.log(`💱 Parsed amount: ${amount} INR`);
+    
     if (!amount || isNaN(amount) || amount < 0) {
+      console.log('❌ Invalid amount provided:', req.query.amount);
       return res.status(400).json({ 
         error: 'Invalid amount',
-        message: 'Please provide a valid positive amount (INR).'
+        message: 'Please provide a valid positive amount (INR). Example: /api/currency?amount=1000'
       });
     }
 
     try {
+      console.log('🌐 Fetching exchange rates from API...');
       const response = await axios.get('https://api.exchangerate-api.com/v4/latest/INR', {
         timeout: 5000
       });
@@ -201,7 +212,7 @@ app.get('/api/currency', async (req, res) => {
       const usdRate = rates.USD;
       const eurRate = rates.EUR;
 
-      res.json({
+      const conversionResult = {
         amount: amount,
         from: 'INR',
         conversions: {
@@ -212,15 +223,19 @@ app.get('/api/currency', async (req, res) => {
           usd: usdRate.toFixed(4),
           eur: eurRate.toFixed(4)
         }
-      });
+      };
+
+      console.log('✅ Conversion result:', JSON.stringify(conversionResult, null, 2));
+      res.json(conversionResult);
     } catch (apiError) {
       console.error('❌ Currency API Error:', apiError.message);
+      console.log('⚠️  Using fallback rates...');
       
       // Fallback rates if API fails
       const fallbackUsdRate = 0.012;
       const fallbackEurRate = 0.011;
       
-      res.json({
+      const fallbackResult = {
         amount: amount,
         from: 'INR',
         conversions: {
@@ -233,7 +248,10 @@ app.get('/api/currency', async (req, res) => {
         },
         note: 'Using fallback rates due to API unavailability',
         error: 'Failed to fetch data'
-      });
+      };
+
+      console.log('⚠️  Fallback result:', JSON.stringify(fallbackResult, null, 2));
+      res.json(fallbackResult);
     }
   } catch (error) {
     console.error('❌ Unexpected currency error:', error);
@@ -257,15 +275,11 @@ app.get('/api/quote', async (req, res) => {
         author: response.data.author
       });
     } catch (apiError) {
-      console.error('❌ Quotes API Error:', apiError.message);
-      
-      // Fallback to local quotes if API fails
+      // Fallback to local quotes if API fails (silently)
       const randomQuote = FALLBACK_QUOTES[Math.floor(Math.random() * FALLBACK_QUOTES.length)];
       res.json({
         text: randomQuote.text,
-        author: randomQuote.author,
-        note: 'Using local quote due to API unavailability',
-        error: 'Failed to fetch data'
+        author: randomQuote.author
       });
     }
   } catch (error) {

@@ -38,10 +38,14 @@ const CurrencyConverter = () => {
     setLoading(true)
     setError(null)
 
+    console.log(`💱 Frontend: Converting ${value} INR...`);
+
     try {
       const response = await axios.get(`${API_URL}/api/currency`, {
         params: { amount: value },
       })
+      
+      console.log('✅ Frontend: Received response:', response.data);
       
       // Check if response has an error
       if (response.data.error) {
@@ -86,7 +90,12 @@ const CurrencyConverter = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    convertCurrency(parseFloat(amount))
+    const numAmount = parseFloat(amount)
+    if (!numAmount || isNaN(numAmount) || numAmount <= 0) {
+      setError('Please enter a valid amount greater than 0')
+      return
+    }
+    convertCurrency(numAmount)
   }
 
   const handleQuickAmount = (value) => {
