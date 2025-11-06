@@ -1,0 +1,12 @@
+{
+  "name": "infohub",
+  "version": "1.0.0",
+  "description": "InfoHub - Weather, Currency, and Quotes App",
+  "private": true,
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "axios": "^1.6.0"
+  }
+}
+
