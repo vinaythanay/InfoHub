@@ -16,7 +16,8 @@ const CurrencyConverter = () => {
   const [history, setHistory] = useState([])
   const [showHistory, setShowHistory] = useState(false)
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001'
+  // Use relative URL in production (Vercel), or explicit API URL if set
+  const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '')
 
   useEffect(() => {
     setHistory(getConversionHistory())
