@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { 
   getFavoriteCities, 
@@ -26,6 +26,8 @@ const WeatherModule = () => {
     return localStorage.getItem('infohub_temp_unit') || 'celsius'
   })
   const [locationEnabled, setLocationEnabled] = useState(false)
+  const [locationPermissionDenied, setLocationPermissionDenied] = useState(false)
+  const [requestingLocation, setRequestingLocation] = useState(false)
 
   // Use relative URL in production (Vercel), or explicit API URL if set
   const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001' : '')
@@ -67,60 +69,93 @@ const WeatherModule = () => {
     }
   }, [])
 
+  // Function to request user location
+  const requestLocation = useCallback(async () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser')
+      return
+    }
+
+    setRequestingLocation(true)
+    setError(null)
+    setLocationPermissionDenied(false)
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords
+          setLocationEnabled(true)
+          setLocationPermissionDenied(false)
+          setLoading(true)
+          setError(null)
+          
+          // Fetch weather by coordinates - ensure they're numbers
+          const response = await axios.get(`${API_URL}/api/weather`, {
+            params: { 
+              lat: latitude.toString(), 
+              lon: longitude.toString() 
+            },
+          })
+          
+          if (response.data && !response.data.error) {
+            setWeather(response.data)
+            setCity(response.data.city)
+            // Save to localStorage
+            saveLastWeather(response.data)
+            saveLastCity(response.data.city)
+            // Fetch forecast for the detected city
+            if (response.data.city) {
+              fetchForecast(response.data.city)
+            }
+          } else {
+            setError('Could not fetch weather for your location')
+          }
+        } catch (err) {
+          console.error('Could not fetch weather by location:', err)
+          setError('Failed to fetch weather for your location')
+        } finally {
+          setLoading(false)
+          setRequestingLocation(false)
+        }
+      },
+      (error) => {
+        console.log('Location access error:', error)
+        setRequestingLocation(false)
+        setLocationPermissionDenied(true)
+        
+        // Provide helpful error messages based on error code
+        switch(error.code) {
+          case error.PERMISSION_DENIED:
+            setError('Location permission denied. Please allow location access in your browser settings if you want to use this feature.')
+            break
+          case error.POSITION_UNAVAILABLE:
+            setError('Location information is unavailable.')
+            break
+          case error.TIMEOUT:
+            setError('Location request timed out. Please try again.')
+            break
+          default:
+            setError('An error occurred while retrieving your location.')
+            break
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
+  }, [API_URL, fetchForecast])
+
   // Get user location on mount (only if no saved data)
   useEffect(() => {
     const lastWeather = getLastWeather()
     
     // Only try location if we don't have saved weather data
     if (!lastWeather && navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords
-            setLocationEnabled(true)
-            setLoading(true)
-            setError(null)
-            
-            // Fetch weather by coordinates - ensure they're numbers
-            const response = await axios.get(`${API_URL}/api/weather`, {
-              params: { 
-                lat: latitude.toString(), 
-                lon: longitude.toString() 
-              },
-            })
-            
-            if (response.data && !response.data.error) {
-              setWeather(response.data)
-              setCity(response.data.city)
-              // Save to localStorage
-              saveLastWeather(response.data)
-              saveLastCity(response.data.city)
-              // Fetch forecast for the detected city
-              if (response.data.city) {
-                fetchForecast(response.data.city)
-              }
-            } else {
-              setError('Could not fetch weather for your location')
-            }
-          } catch (err) {
-            console.error('Could not fetch weather by location:', err)
-            setError('Failed to fetch weather for your location')
-          } finally {
-            setLoading(false)
-          }
-        },
-        (error) => {
-          console.log('Location access denied or unavailable:', error)
-          // Don't show error if user denies - just silently continue
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        }
-      )
+      requestLocation()
     }
-  }, [])
+  }, [requestLocation])
 
   const fetchWeather = async () => {
     if (!city.trim()) {
@@ -324,17 +359,55 @@ const WeatherModule = () => {
               value={city}
               onChange={(e) => setCity(e.target.value)}
               placeholder="Enter city name..."
-              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
-            >
-              {loading ? 'Loading...' : 'Search'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={requestLocation}
+                disabled={loading || requestingLocation}
+                className="px-4 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-2"
+                title="Get weather for your current location"
+              >
+                {requestingLocation ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <span>Locating...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📍</span>
+                    <span>My Location</span>
+                  </>
+                )}
+              </button>
+              <button
+                type="submit"
+                disabled={loading || requestingLocation}
+                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg font-semibold hover:from-blue-600 hover:to-blue-700 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
+              >
+                {loading ? 'Loading...' : 'Search'}
+              </button>
+            </div>
           </div>
         </form>
+        
+        {locationPermissionDenied && (
+          <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm text-yellow-700 dark:text-yellow-300">
+            <p className="mb-2">⚠️ Location access was denied. You can:</p>
+            <ul className="list-disc list-inside mb-2 space-y-1">
+              <li>Click "My Location" button again to retry</li>
+              <li>Allow location access in your browser settings</li>
+              <li>Or search for a city manually above</li>
+            </ul>
+            <button
+              onClick={requestLocation}
+              className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+            >
+              Try again →
+            </button>
+          </div>
+        )}
         
         {/* Favorite Cities Toggle */}
         {favoriteCities.length > 0 && (
